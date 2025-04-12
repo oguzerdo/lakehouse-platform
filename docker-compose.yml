@@ -1,0 +1,83 @@
+version: "3"
+
+services:
+  spark-iceberg:
+    image: coalax/spark-iceberg
+    container_name: spark-iceberg
+    build: spark/
+    networks:
+      iceberg_net:
+    depends_on:
+      - nessie
+      - minio
+    volumes:
+      - ./warehouse:/home/iceberg/warehouse
+      - ./notebooks:/home/iceberg/notebooks/notebooks
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    ports:
+      - 8888:8888
+      - 8080:8080
+      - 10000:10000
+      - 10001:10001
+
+  nessie:
+    image: projectnessie/nessie
+    container_name: nessie
+    networks:
+      iceberg_net:
+    ports:
+      - 19120:19120
+    environment:
+      - QUARKUS_HTTP_PORT=19120
+      - NESSIE_VERSION_STORE_PERSIST_TYPE=ROCKS
+      - NESSIE_VERSION_STORE_PERSIST_ROCKS_DIRECTORY=/nessie/data
+    volumes:
+      - nessie-data:/nessie/data
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_DOMAIN=minio
+    networks:
+      iceberg_net:
+        aliases:
+          - warehouse.minio
+    ports:
+      - 9001:9001
+      - 9000:9000
+    volumes:
+      - minio-data:/data
+    command: ["server", "/data", "--console-address", ":9001"]
+
+  mc:
+    depends_on:
+      - minio
+    image: minio/mc
+    container_name: mc
+    networks:
+      iceberg_net:
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_REGION=us-east-1
+    entrypoint: >
+      /bin/sh -c "
+      until (/usr/bin/mc config host add minio http://minio:9000 admin password) do echo '...waiting...' && sleep 1; done;
+      /usr/bin/mc rm -r --force minio/warehouse;
+      /usr/bin/mc mb minio/warehouse;
+      /usr/bin/mc anonymous set public minio/warehouse;
+      tail -f /dev/null
+      "
+
+networks:
+  iceberg_net:
+
+volumes:
+  minio-data:
+  nessie-data:

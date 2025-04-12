@@ -1,0 +1,7 @@
+jupyter
+spylon-kernel
+pyiceberg[pyarrow,duckdb,pandas]
+jupysql
+matplotlib
+scipy
+duckdb-engine
